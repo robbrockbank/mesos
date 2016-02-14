@@ -51,6 +51,31 @@ public:
 
   virtual ~Docker() {}
 
+  class Network
+  {
+  public:
+      static Try<Network> create(
+              const std::string& output);
+
+      // Returns the docker inspect output.
+      const std::string output;
+
+      // Returns the ID of the container.
+      const std::string id;
+
+      // Returns the name of the container.
+      const std::string name;
+
+  private:
+      Network(
+          const std::string& output,
+          const std::string& id,
+          const std::string& name)
+          : output(output),
+            id(id),
+            name(name) {}
+  };
+
   class Container
   {
   public:
@@ -159,6 +184,25 @@ public:
       const std::string& image,
       bool force = false) const;
 
+  // Perform a Docker network create.
+  virtual process::Future<Nothing> network_create(
+      const mesos::CommandInfo& commandInfo,
+      const std::string& name,
+      const std::string& networkDriver,
+      const std::string& ipamDriver,
+      const Option<map<std::string, std::string>>& networkOptions = None(),
+      const Option<map<std::string, std::string>>& ipamOptions = None(),
+      const process::Subprocess::IO& stdout = process::Subprocess::PIPE(),
+      const process::Subprocess::IO& stderr = process::Subprocess::PIPE()) const;
+
+  virtual process::Future<Network> network_inspect(
+      const std::string& networkName,
+      const Option<Duration>& retryInterval = None()) const;
+
+  // Performs 'docker network rm CONTAINER'.
+  virtual process::Future<Nothing> network_rm(
+      const std::string& networkName) const;
+
   // Validate current docker version is not less than minVersion.
   virtual Try<Nothing> validateVersion(const Version& minVersion) const;
 
@@ -209,7 +253,7 @@ private:
       const Option<Duration>& retryInterval,
       const process::Future<std::string>& output);
 
-  static process::Future<std::list<Container>> _ps(
+    static process::Future<std::list<Container>> _ps(
       const Docker& docker,
       const std::string& cmd,
       const process::Subprocess& s,
@@ -262,6 +306,27 @@ private:
   static void pullDiscarded(
       const process::Subprocess& s,
       const std::string& cmd);
+
+  static process::Future<Nothing> _network_create(
+      const Option<int>& status);
+
+  static void _network_inspect(
+      const std::string& cmd,
+      const process::Owned<process::Promise<Network>>& promise,
+      const Option<Duration>& retryInterval);
+
+  static void __network_inspect(
+      const std::string& cmd,
+      const process::Owned<process::Promise<Network>>& promise,
+      const Option<Duration>& retryInterval,
+      process::Future<std::string> output,
+      const process::Subprocess& s);
+
+  static void ___network_inspect(
+      const std::string& cmd,
+      const process::Owned<process::Promise<Network>>& promise,
+      const Option<Duration>& retryInterval,
+      const process::Future<std::string>& output);
 
   const std::string path;
   const std::string socket;

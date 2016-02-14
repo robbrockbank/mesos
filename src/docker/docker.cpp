@@ -1467,3 +1467,26 @@ void Docker::___network_inspect(
 
     promise->set(network.get());
 }
+
+
+Future<Nothing> Docker::_network_rm(
+        const string& networkName) const
+{
+    const string cmd =
+            path + " -H " + socket +
+            " network rm " + networkName;
+
+    VLOG(1) << "Running " << cmd;
+
+    Try<Subprocess> s = subprocess(
+            cmd,
+            Subprocess::PATH("/dev/null"),
+            Subprocess::PATH("/dev/null"),
+            Subprocess::PIPE());
+
+    if (s.isError()) {
+        return Failure(s.error());
+    }
+
+    return checkError(cmd, s.get());
+}
