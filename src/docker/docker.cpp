@@ -1455,7 +1455,7 @@ void Docker::___networkInspect(
 }
 
 
-Future<Nothing> Docker::_networkRm(
+Future<Nothing> Docker::networkRm(
     const string& networkName) const
 {
     const string cmd =
