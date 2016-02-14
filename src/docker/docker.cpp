@@ -1207,3 +1207,263 @@ Future<Docker::Image> Docker::____pull(
 
   return Failure("Failed to find image");
 }
+
+
+// TODO(robbrockbank): Parse this string with a protobuf.
+Try<Docker::Network> Docker::Network::create(const string& output)
+{
+    Try<JSON::Array> parse = JSON::parse<JSON::Array>(output);
+    if (parse.isError()) {
+        return Error("Failed to parse JSON: " + parse.error());
+    }
+
+    // TODO(benh): Handle the case where the short network ID was
+    // not sufficiently unique and 'array.values.size() > 1'.
+    JSON::Array array = parse.get();
+    if (array.values.size() != 1) {
+        return Error("Failed to find network");
+    }
+
+    CHECK(array.values.front().is<JSON::Object>());
+
+    JSON::Object json = array.values.front().as<JSON::Object>();
+
+    Result<JSON::String> idValue = json.find<JSON::String>("Id");
+    if (idValue.isNone()) {
+        return Error("Unable to find Id in container");
+    } else if (idValue.isError()) {
+        return Error("Error finding Id in container: " + idValue.error());
+    }
+
+    string id = idValue.get().value;
+
+    Result<JSON::String> nameValue = json.find<JSON::String>("Name");
+    if (nameValue.isNone()) {
+        return Error("Unable to find Name in container");
+    } else if (nameValue.isError()) {
+        return Error("Error finding Name in container: " + nameValue.error());
+    }
+
+    string name = nameValue.get().value;
+
+    return Docker::Network(output, id, name);
+}
+
+Future<Nothing> Docker::network_create(
+        const CommandInfo& commandInfo,
+        const string& name,
+        const string& networkDriver,
+        const string& ipamDriver,
+        const Option<map<string, string>>& networkOptions,
+        const Option<map<string, string>>& ipamOptions,
+        const process::Subprocess::IO& stdout,
+        const process::Subprocess::IO& stderr) const
+{
+    vector<string> argv;
+    argv.push_back(path);
+    argv.push_back("-H");
+    argv.push_back(socket);
+    argv.push_back("network");
+    argv.push_back("create");
+
+    if (networkDriver) {
+        argv.push_back("--driver");
+        argv.push_back(networkDriver);
+    }
+
+    if (ipamDriver) {
+        argv.push_back("--ipam-driver");
+        argv.push_back(ipamDriver);
+    }
+
+    if (networkOptions.isSome()) {
+        foreachpair (string key, string value, networkOptions.get()) {
+            argv.push_back("--opt");
+            argv.push_back(key + "=" + value);
+        }
+    }
+
+    if (ipamOptions.isSome()) {
+        foreachpair (string key, string value, ipamOptions.get()) {
+            argv.push_back("--ipam-opt");
+            argv.push_back(key + "=" + value);
+        }
+    }
+
+    argv.push_back(name);
+
+    string cmd = strings::join(" ", argv);
+
+    VLOG(1) << "Running " << cmd;
+
+    map<string, string> environment = os::environment();
+    Try<Subprocess> s = subprocess(
+            path,
+            argv,
+            Subprocess::PATH("/dev/null"),
+            stdout,
+            stderr,
+            None(),
+            environment);
+
+    if (s.isError()) {
+        return Failure(s.error());
+    }
+
+    // We don't call checkError here to avoid printing the stderr
+    // of the docker container task as docker run with attach forwards
+    // the container's stderr to the client's stderr.
+    return s.get().status()
+            .then(lambda::bind(
+                    &Docker::_nework_create,
+                    lambda::_1))
+            .onDiscard(lambda::bind(&commandDiscarded, s.get(), cmd));
+}
+
+
+Future<Nothing> Docker::_network_create(const Option<int>& status)
+{
+    if (status.isNone()) {
+        return Failure("Failed to get exit status");
+    } else if (status.get() != 0) {
+        return Failure("Docker network exited on error: " + WSTRINGIFY(status.get()));
+    }
+
+    return Nothing();
+}
+
+
+Future<Docker::Network> Docker::network_inspect(
+        const string& networkName,
+        const Option<Duration>& retryInterval) const
+{
+    Owned<Promise<Docker::Network>> promise(new Promise<Docker::Network>());
+
+    const string cmd =  path + " -H " + socket + " network inspect " + networkame;
+    _inspect(cmd, promise, retryInterval);
+
+    return promise->future();
+}
+
+
+void Docker::_network_inspect(
+        const string& cmd,
+        const Owned<Promise<Docker::Network>>& promise,
+        const Option<Duration>& retryInterval)
+{
+    if (promise->future().hasDiscard()) {
+        promise->discard();
+        return;
+    }
+
+    VLOG(1) << "Running " << cmd;
+
+    Try<Subprocess> s = subprocess(
+            cmd,
+            Subprocess::PATH("/dev/null"),
+            Subprocess::PIPE(),
+            Subprocess::PIPE());
+
+    if (s.isError()) {
+        promise->fail(s.error());
+        return;
+    }
+
+    // Start reading from stdout so writing to the pipe won't block
+    // to handle cases where the output is larger than the pipe
+    // capacity.
+    const Future<string> output = io::read(s.get().out().get());
+
+    s.get().status()
+            .onAny([=]() { __network_inspect(cmd, promise, retryInterval, output, s.get()); });
+}
+
+
+void Docker::__network_inspect(
+        const string& cmd,
+        const Owned<Promise<Docker::Network>>& promise,
+        const Option<Duration>& retryInterval,
+        Future<string> output,
+        const Subprocess& s)
+{
+    if (promise->future().hasDiscard()) {
+        promise->discard();
+        output.discard();
+        return;
+    }
+
+    // Check the exit status of 'docker inspect'.
+    CHECK_READY(s.status());
+
+    Option<int> status = s.status().get();
+
+    if (!status.isSome()) {
+        promise->fail("No status found from '" + cmd + "'");
+    } else if (status.get() != 0) {
+        output.discard();
+
+        if (retryInterval.isSome()) {
+            VLOG(1) << "Retrying inspect with non-zero status code. cmd: '"
+            << cmd << "', interval: " << stringify(retryInterval.get());
+            Clock::timer(retryInterval.get(),
+                         [=]() { _inspect(cmd, promise, retryInterval); } );
+            return;
+        }
+
+        CHECK_SOME(s.err());
+        io::read(s.err().get())
+                .then(lambda::bind(
+                        failure<Nothing>,
+                        cmd,
+                        status.get(),
+                        lambda::_1))
+                .onAny([=](const Future<Nothing>& future) {
+                    CHECK_FAILED(future);
+                    promise->fail(future.failure());
+                });
+        return;
+    }
+
+    // Read to EOF.
+    CHECK_SOME(s.out());
+    output
+            .onAny([=](const Future<string>& output) {
+                ___network_inspect(cmd, promise, retryInterval, output);
+            });
+}
+
+
+void Docker::___network_inspect(
+        const string& cmd,
+        const Owned<Promise<Docker::Network>>& promise,
+        const Option<Duration>& retryInterval,
+        const Future<string>& output)
+{
+    if (promise->future().hasDiscard()) {
+        promise->discard();
+        return;
+    }
+
+    if (!output.isReady()) {
+        promise->fail(output.isFailed() ? output.failure() : "future discarded");
+        return;
+    }
+
+    Try<Docker::Network> network = Docker::Network::create(
+            output.get());
+
+    if (network.isError()) {
+        promise->fail("Unable to create network: " + network.error());
+        return;
+    }
+
+    if (retryInterval.isSome() && !network.get().started) {
+        VLOG(1) << "Retrying inspect since network not yet created. cmd: '"
+        << cmd << "', interval: " << stringify(retryInterval.get());
+        Clock::timer(retryInterval.get(),
+                     [=]() { _inspect(cmd, promise, retryInterval); } );
+        return;
+    }
+
+    promise->set(network.get());
+}
