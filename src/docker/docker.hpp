@@ -185,22 +185,22 @@ public:
       bool force = false) const;
 
   // Perform a Docker network create.
-  virtual process::Future<Nothing> network_create(
+  virtual process::Future<Nothing> networkCreate(
       const mesos::CommandInfo& commandInfo,
       const std::string& name,
-      const std::string& networkDriver,
-      const std::string& ipamDriver,
+      const std::string& networkDriver = "default",
+      const std::string& ipamDriver = "default",
       const Option<std::map<std::string, std::string>>& networkOptions = None(),
       const Option<std::map<std::string, std::string>>& ipamOptions = None(),
       const process::Subprocess::IO& stdout = process::Subprocess::PIPE(),
       const process::Subprocess::IO& stderr = process::Subprocess::PIPE()) const;
 
-  virtual process::Future<Network> network_inspect(
+  virtual process::Future<Network> networkInspect(
       const std::string& networkName,
       const Option<Duration>& retryInterval = None()) const;
 
   // Performs 'docker network rm CONTAINER'.
-  virtual process::Future<Nothing> network_rm(
+  virtual process::Future<Nothing> networkRm(
       const std::string& networkName) const;
 
   // Validate current docker version is not less than minVersion.
@@ -307,22 +307,22 @@ private:
       const process::Subprocess& s,
       const std::string& cmd);
 
-  static process::Future<Nothing> _network_create(
+  static process::Future<Nothing> _networkCreate(
       const Option<int>& status);
 
-  static void _network_inspect(
+  static void _networkInspect(
       const std::string& cmd,
       const process::Owned<process::Promise<Network>>& promise,
       const Option<Duration>& retryInterval);
 
-  static void __network_inspect(
+  static void __networkInspect(
       const std::string& cmd,
       const process::Owned<process::Promise<Network>>& promise,
       const Option<Duration>& retryInterval,
       process::Future<std::string> output,
       const process::Subprocess& s);
 
-  static void ___network_inspect(
+  static void ___networkInspect(
       const std::string& cmd,
       const process::Owned<process::Promise<Network>>& promise,
       const Option<Duration>& retryInterval,

@@ -1249,15 +1249,15 @@ Try<Docker::Network> Docker::Network::create(const string& output)
     return Docker::Network(output, id, name);
 }
 
-Future<Nothing> Docker::network_create(
-        const CommandInfo& commandInfo,
-        const string& name,
-        const string& networkDriver,
-        const string& ipamDriver,
-        const Option<map<string, string>>& networkOptions,
-        const Option<map<string, string>>& ipamOptions,
-        const process::Subprocess::IO& stdout,
-        const process::Subprocess::IO& stderr) const
+Future<Nothing> Docker::networkCreate(
+    const CommandInfo& commandInfo,
+    const string& name,
+    const string& networkDriver,
+    const string& ipamDriver,
+    const Option<map<string, string>>& networkOptions,
+    const Option<map<string, string>>& ipamOptions,
+    const process::Subprocess::IO& stdout,
+    const process::Subprocess::IO& stderr) const
 {
     vector<string> argv;
     argv.push_back(path);
@@ -1265,16 +1265,10 @@ Future<Nothing> Docker::network_create(
     argv.push_back(socket);
     argv.push_back("network");
     argv.push_back("create");
-
-    if (networkDriver) {
-        argv.push_back("--driver");
-        argv.push_back(networkDriver);
-    }
-
-    if (ipamDriver) {
-        argv.push_back("--ipam-driver");
-        argv.push_back(ipamDriver);
-    }
+    argv.push_back("--driver");
+    argv.push_back(networkDriver);
+    argv.push_back("--ipam-driver");
+    argv.push_back(ipamDriver);
 
     if (networkOptions.isSome()) {
         foreachpair (string key, string value, networkOptions.get()) {
@@ -1315,13 +1309,13 @@ Future<Nothing> Docker::network_create(
     // the container's stderr to the client's stderr.
     return s.get().status()
             .then(lambda::bind(
-                    &Docker::_nework_create,
+                    &Docker::_networkCreate,
                     lambda::_1))
             .onDiscard(lambda::bind(&commandDiscarded, s.get(), cmd));
 }
 
 
-Future<Nothing> Docker::_network_create(const Option<int>& status)
+Future<Nothing> Docker::_networkCreate(const Option<int>& status)
 {
     if (status.isNone()) {
         return Failure("Failed to get exit status");
@@ -1333,23 +1327,23 @@ Future<Nothing> Docker::_network_create(const Option<int>& status)
 }
 
 
-Future<Docker::Network> Docker::network_inspect(
-        const string& networkName,
-        const Option<Duration>& retryInterval) const
+Future<Docker::Network> Docker::networkInspect(
+    const string& networkName,
+    const Option<Duration>& retryInterval) const
 {
     Owned<Promise<Docker::Network>> promise(new Promise<Docker::Network>());
 
-    const string cmd =  path + " -H " + socket + " network inspect " + networkame;
-    _inspect(cmd, promise, retryInterval);
+    const string cmd =  path + " -H " + socket + " network inspect " + networkName;
+    _networkInspect(cmd, promise, retryInterval);
 
     return promise->future();
 }
 
 
-void Docker::_network_inspect(
-        const string& cmd,
-        const Owned<Promise<Docker::Network>>& promise,
-        const Option<Duration>& retryInterval)
+void Docker::_networkInspect(
+    const string& cmd,
+    const Owned<Promise<Docker::Network>>& promise,
+    const Option<Duration>& retryInterval)
 {
     if (promise->future().hasDiscard()) {
         promise->discard();
@@ -1375,16 +1369,16 @@ void Docker::_network_inspect(
     const Future<string> output = io::read(s.get().out().get());
 
     s.get().status()
-            .onAny([=]() { __network_inspect(cmd, promise, retryInterval, output, s.get()); });
+            .onAny([=]() { __networkInspect(cmd, promise, retryInterval, output, s.get()); });
 }
 
 
-void Docker::__network_inspect(
-        const string& cmd,
-        const Owned<Promise<Docker::Network>>& promise,
-        const Option<Duration>& retryInterval,
-        Future<string> output,
-        const Subprocess& s)
+void Docker::__networkInspect(
+    const string& cmd,
+    const Owned<Promise<Docker::Network>>& promise,
+    const Option<Duration>& retryInterval,
+    Future<string> output,
+    const Subprocess& s)
 {
     if (promise->future().hasDiscard()) {
         promise->discard();
@@ -1406,7 +1400,7 @@ void Docker::__network_inspect(
             VLOG(1) << "Retrying inspect with non-zero status code. cmd: '"
             << cmd << "', interval: " << stringify(retryInterval.get());
             Clock::timer(retryInterval.get(),
-                         [=]() { _inspect(cmd, promise, retryInterval); } );
+                         [=]() { _networkInspect(cmd, promise, retryInterval); } );
             return;
         }
 
@@ -1428,16 +1422,16 @@ void Docker::__network_inspect(
     CHECK_SOME(s.out());
     output
             .onAny([=](const Future<string>& output) {
-                ___network_inspect(cmd, promise, retryInterval, output);
+                ___networkInspect(cmd, promise, retryInterval, output);
             });
 }
 
 
-void Docker::___network_inspect(
-        const string& cmd,
-        const Owned<Promise<Docker::Network>>& promise,
-        const Option<Duration>& retryInterval,
-        const Future<string>& output)
+void Docker::___networkInspect(
+    const string& cmd,
+    const Owned<Promise<Docker::Network>>& promise,
+    const Option<Duration>& retryInterval,
+    const Future<string>& output)
 {
     if (promise->future().hasDiscard()) {
         promise->discard();
@@ -1469,8 +1463,8 @@ void Docker::___network_inspect(
 }
 
 
-Future<Nothing> Docker::_network_rm(
-        const string& networkName) const
+Future<Nothing> Docker::_networkRm(
+    const string& networkName) const
 {
     const string cmd =
             path + " -H " + socket +
