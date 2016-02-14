@@ -509,7 +509,7 @@ Future<Nothing> Docker::run(
   const string& image = dockerInfo.image();
 
   argv.push_back("--net");
-  string network; = name;
+  string network = name;
   /*switch (dockerInfo.network()) {
     case ContainerInfo::DockerInfo::HOST: network = "host"; break;
     case ContainerInfo::DockerInfo::BRIDGE: network = "bridge"; break;
