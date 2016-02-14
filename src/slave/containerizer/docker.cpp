@@ -877,9 +877,11 @@ Future<Docker::Container> DockerContainerizerProcess::launchExecutorContainer(
         self(),
         [=](const ContainerLogger::SubprocessInfo& subprocessInfo)
           -> Future<Docker::Container> {
+
+    Owned<Promise<Docker::Container>> promise(new Promise<Docker::Container>());
+
     // Grab the network groups and map set these as profiles on the network
     // creation option.
-
 
     // RLB: Create a Calico network just for this container.  Use the container
     // name as the network name (for simplicity).
@@ -888,45 +890,53 @@ Future<Docker::Container> DockerContainerizerProcess::launchExecutorContainer(
         containerName,
         "calico",
         "calico",
-        networkOptions,
+        None(),
         None(),
         subprocessInfo.out,
         subprocessInfo.err);
 
-    // Start the executor in a Docker container.
-    // This executor could either be a custom executor specified by an
-    // ExecutorInfo, or the docker executor.
-    // RLB: The network name should be set to be the container name as per above.
-    container->container.dockerInfo.set_network(ContainerInfo::DockerInfo::USER);
-    container->container.dockerInfo.set_user_network(containerName);
-    Future<Nothing> run = docker->run(
-        container->container,
-        container->command,
-        containerName,
-        container->directory,
-        flags.sandbox_directory,
-        container->resources,
-        container->environment,
-        subprocessInfo.out,
-        subprocessInfo.err);
+    network.onFailed([=](const string& failure) mutable {
+        promise->fail(failure);
+    });
 
-    Owned<Promise<Docker::Container>> promise(new Promise<Docker::Container>());
+    run = network.onReady(
+        defer(self(), [=](const Future<Nothing>&) {
+            // Start the executor in a Docker container.
+            // This executor could either be a custom executor specified by an
+            // ExecutorInfo, or the docker executor.
+            // RLB: The network name should be set to be the container name as per above.
+            container->container.dockerInfo.set_network(
+                    ContainerInfo::DockerInfo::USER);
+            container->container.dockerInfo.set_user_network(containerName);
+            Future <Nothing> runf = docker->run(
+                    container->container,
+                    container->command,
+                    containerName,
+                    container->directory,
+                    flags.sandbox_directory,
+                    container->resources,
+                    container->environment,
+                    subprocessInfo.out,
+                    subprocessInfo.err);
+            return runf;
+        }));
+
     // We like to propogate the run failure when run fails so slave can
     // send this failure back to the scheduler. Otherwise we return
     // inspect's result or its failure, which should not fail when
     // the container isn't launched.
-    Future<Docker::Container> inspect =
-      docker->inspect(containerName, slave::DOCKER_INSPECT_DELAY)
-        .onAny([=](Future<Docker::Container> f) {
-            // We cannot associate the promise outside of the callback
-            // because we like to propagate run's failure when
-            // available.
-            promise->associate(f);
-        });
+    Future <Docker::Container> inspect =
+            docker->inspect(containerName, slave::DOCKER_INSPECT_DELAY)
+                    .onAny([=](Future <Docker::Container> f) {
+                        // We cannot associate the promise outside of the callback
+                        // because we like to propagate run's failure when
+                        // available.
+                        promise->associate(f);
+                    });
 
-    run.onFailed([=](const string& failure) mutable {
-      inspect.discard();
-      promise->fail(failure);
+    run.onFailed([=](const string &failure) mutable {
+        inspect.discard();
+        promise->fail(failure);
     });
 
     return promise->future();
