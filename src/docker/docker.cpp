@@ -1451,14 +1451,6 @@ void Docker::___networkInspect(
         return;
     }
 
-    if (retryInterval.isSome() && !network.get().started) {
-        VLOG(1) << "Retrying inspect since network not yet created. cmd: '"
-        << cmd << "', interval: " << stringify(retryInterval.get());
-        Clock::timer(retryInterval.get(),
-                     [=]() { _inspect(cmd, promise, retryInterval); } );
-        return;
-    }
-
     promise->set(network.get());
 }
 
