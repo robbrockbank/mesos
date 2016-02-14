@@ -905,9 +905,9 @@ Future<Docker::Container> DockerContainerizerProcess::launchExecutorContainer(
             // This executor could either be a custom executor specified by an
             // ExecutorInfo, or the docker executor.
             // RLB: The network name should be set to be the container name as per above.
-            container->container.docker.set_network(
+            container->container.docker().set_network(
                     ContainerInfo::DockerInfo::USER);
-            container->container.docker.set_user_network(containerName);
+            container->container.docker().set_user_network(containerName);
             Future <Nothing> runf = docker->run(
                     container->container,
                     container->command,
