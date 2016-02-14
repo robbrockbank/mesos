@@ -190,8 +190,8 @@ public:
       const std::string& name,
       const std::string& networkDriver,
       const std::string& ipamDriver,
-      const Option<map<std::string, std::string>>& networkOptions = None(),
-      const Option<map<std::string, std::string>>& ipamOptions = None(),
+      const Option<std::map<std::string, std::string>>& networkOptions = None(),
+      const Option<std::map<std::string, std::string>>& ipamOptions = None(),
       const process::Subprocess::IO& stdout = process::Subprocess::PIPE(),
       const process::Subprocess::IO& stderr = process::Subprocess::PIPE()) const;
 
