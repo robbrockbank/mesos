@@ -899,7 +899,7 @@ Future<Docker::Container> DockerContainerizerProcess::launchExecutorContainer(
         promise->fail(failure);
     });
 
-    run = network.onReady(
+    Future<Nothing> run = network.onReady(
         defer(self(), [=](const Future<Nothing>&) {
             // Start the executor in a Docker container.
             // This executor could either be a custom executor specified by an
