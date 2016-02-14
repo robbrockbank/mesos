@@ -877,9 +877,28 @@ Future<Docker::Container> DockerContainerizerProcess::launchExecutorContainer(
         self(),
         [=](const ContainerLogger::SubprocessInfo& subprocessInfo)
           -> Future<Docker::Container> {
+    // Grab the network groups and map set these as profiles on the network
+    // creation option.
+
+
+    // RLB: Create a Calico network just for this container.  Use the container
+    // name as the network name (for simplicity).
+    Future<Nothing> network = docker->networkCreate(
+        container->command,
+        containerName,
+        "calico",
+        "calico",
+        networkOptions,
+        None(),
+        subprocessInfo.out,
+        subprocessInfo.err);
+
     // Start the executor in a Docker container.
     // This executor could either be a custom executor specified by an
     // ExecutorInfo, or the docker executor.
+    // RLB: The network name should be set to be the container name as per above.
+    container->container.dockerInfo.set_network(ContainerInfo::DockerInfo::USER);
+    container->container.dockerInfo.set_user_network(containerName);
     Future<Nothing> run = docker->run(
         container->container,
         container->command,
