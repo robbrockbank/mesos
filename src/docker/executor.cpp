@@ -284,43 +284,53 @@ private:
           inspect.discard();
           return inspect;
         })
-        .onAny(defer(self(), [=](const Future<Nothing>&) {
-          CHECK_SOME(driver);
-          TaskState state;
-          string message;
-          if (!stop.isReady()) {
-            state = TASK_FAILED;
-            message = "Unable to stop docker container, error: " +
-                      (stop.isFailed() ? stop.failure() : "future discarded");
-          } else if (killed) {
-            state = TASK_KILLED;
-          } else if (!run.isReady()) {
-            state = TASK_FAILED;
-            message = "Docker container run error: " +
-                      (run.isFailed() ?
-                       run.failure() : "future discarded");
-          } else {
-            state = TASK_FINISHED;
-          }
+        .onAny([=](const Future <Nothing>& f) {
+            // We're adding task and executor resources to launch docker since
+            // the DockerContainerizer updates the container cgroup limits
+            // directly and it expects it to be the sum of both task and
+            // executor resources. This does leave to a bit of unaccounted
+            // resources for running this executor, but we are assuming
+            // this is just a very small amount of overcommit.
+            Future<Nothing> rm = docker->networkRm(containerName);
+            return rm;
+          })
+          .onAny(defer(self(), [=](const Future<Nothing>&) {
+              CHECK_SOME(driver);
+              TaskState state;
+              string message;
+              if (!stop.isReady()) {
+                state = TASK_FAILED;
+                message = "Unable to stop docker container, error: " +
+                          (stop.isFailed() ? stop.failure() : "future discarded");
+              } else if (killed) {
+                state = TASK_KILLED;
+              } else if (!run.isReady()) {
+                state = TASK_FAILED;
+                message = "Docker container run error: " +
+                          (run.isFailed() ?
+                           run.failure() : "future discarded");
+              } else {
+                state = TASK_FINISHED;
+              }
 
-          TaskStatus taskStatus;
-          taskStatus.mutable_task_id()->CopyFrom(taskId);
-          taskStatus.set_state(state);
-          taskStatus.set_message(message);
-          if (killed && killedByHealthCheck) {
-            taskStatus.set_healthy(false);
-          }
+              TaskStatus taskStatus;
+              taskStatus.mutable_task_id()->CopyFrom(taskId);
+              taskStatus.set_state(state);
+              taskStatus.set_message(message);
+              if (killed && killedByHealthCheck) {
+                taskStatus.set_healthy(false);
+              }
 
-          driver.get()->sendStatusUpdate(taskStatus);
+              driver.get()->sendStatusUpdate(taskStatus);
 
-          // A hack for now ... but we need to wait until the status update
-          // is sent to the slave before we shut ourselves down.
-          // TODO(tnachen): Remove this hack and also the same hack in the
-          // command executor when we have the new HTTP APIs to wait until
-          // an ack.
-          os::sleep(Seconds(1));
-          driver.get()->stop();
-        }));
+              // A hack for now ... but we need to wait until the status update
+              // is sent to the slave before we shut ourselves down.
+              // TODO(tnachen): Remove this hack and also the same hack in the
+              // command executor when we have the new HTTP APIs to wait until
+              // an ack.
+              os::sleep(Seconds(1));
+              driver.get()->stop();
+            }));
     }));
   }
 
