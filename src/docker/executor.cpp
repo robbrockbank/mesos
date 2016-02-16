@@ -141,8 +141,8 @@ public:
           "calico",
           None(),
           None(),
-          subprocessInfo.out,
-          subprocessInfo.err);
+          Subprocess::FD(STDOUT_FILENO),
+          Subprocess::FD(STDERR_FILENO));
 
     network.onAny([=](const Future <Nothing>& f) {
         // We're adding task and executor resources to launch docker since
