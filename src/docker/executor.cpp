@@ -134,7 +134,7 @@ public:
 
     // RLB: Create a Calico network just for this container.  Use the container
     // name as the network name (for simplicity).
-    /*network = docker->networkCreate(
+    network = docker->networkCreate(
           container->command,
           containerName,
           "calico",
@@ -142,9 +142,9 @@ public:
           None(),
           None(),
           subprocessInfo.out,
-          subprocessInfo.err);*/
+          subprocessInfo.err);
 
-    //network.onAny([=](const Future <Nothing>& f) {
+    network.onAny([=](const Future <Nothing>& f) {
         // We're adding task and executor resources to launch docker since
         // the DockerContainerizer updates the container cgroup limits
         // directly and it expects it to be the sum of both task and
@@ -203,7 +203,7 @@ public:
 
         inspect.onReady(
                 defer(self(), &Self::launchHealthCheck, containerName, task));
-    //}
+    });
   }
 
   void killTask(ExecutorDriver* driver, const TaskID& taskId)
