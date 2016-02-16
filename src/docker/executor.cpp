@@ -135,7 +135,7 @@ public:
     // RLB: Create a Calico network just for this container.  Use the container
     // name as the network name (for simplicity).
     network = docker->networkCreate(
-          container->command,
+          task.command(),
           containerName,
           "calico",
           "calico",
